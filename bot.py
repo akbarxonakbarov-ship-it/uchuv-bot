@@ -383,15 +383,25 @@ IMPORTANT RULES:
         return None
 
 
-    except Exception as error:
+except urllib.error.HTTPError as error:
 
-        print(
-            "Gemini API error:",
-            error
-        )
+    error_body = error.read().decode("utf-8", errors="replace")
 
-        return None
+    print("========== GEMINI API ERROR ==========")
+    print("HTTP STATUS:", error.code)
+    print("ERROR:", error_body)
+    print("======================================")
 
+    return None
+
+except Exception as error:
+
+    print("========== GEMINI CONNECTION ERROR ==========")
+    print("ERROR TYPE:", type(error).__name__)
+    print("ERROR:", str(error))
+    print("=============================================")
+
+    return None
 
     # --------------------------------------------------------
     # Extract Gemini JSON
