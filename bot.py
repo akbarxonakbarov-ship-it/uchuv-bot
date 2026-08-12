@@ -3,6 +3,7 @@ import json
 import time
 import urllib.request
 import urllib.parse
+import urllib.error
 import threading
 from datetime import date
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -13,20 +14,22 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 # ============================================================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY" )
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN topilmadi")
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY topilmadi")
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY topilmadi")
 
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-OPENAI_API = "https://api.openai.com/v1/responses"
 
-# MVP uchun tez va tejamkor model
-OPENAI_MODEL = "gpt-5-mini"
+# Gemini API
+GEMINI_API = (
+    "https://generativelanguage.googleapis.com/"
+    "v1beta/models/gemini-2.5-flash:generateContent"
+)
 
 
 # ============================================================
@@ -38,26 +41,39 @@ def telegram_request(method, data=None):
     url = f"{TELEGRAM_API}/{method}"
 
     if data is not None:
-        encoded = urllib.parse.urlencode(data).encode("utf-8")
+
+        encoded = urllib.parse.urlencode(
+            data
+        ).encode("utf-8")
 
         request = urllib.request.Request(
             url,
             data=encoded,
             method="POST"
         )
+
     else:
+
         request = urllib.request.Request(
             url,
             method="GET"
         )
 
-    with urllib.request.urlopen(request, timeout=60) as response:
+    with urllib.request.urlopen(
+        request,
+        timeout=60
+    ) as response:
+
         return json.loads(
             response.read().decode("utf-8")
         )
 
 
-def send_message(chat_id, text, keyboard=None):
+def send_message(
+    chat_id,
+    text,
+    keyboard=None
+):
 
     data = {
         "chat_id": chat_id,
@@ -65,19 +81,25 @@ def send_message(chat_id, text, keyboard=None):
     }
 
     if keyboard:
+
         data["reply_markup"] = json.dumps({
             "keyboard": keyboard,
             "resize_keyboard": True
         })
 
     try:
+
         telegram_request(
             "sendMessage",
             data
         )
 
     except Exception as error:
-        print("Telegram send error:", error)
+
+        print(
+            "Telegram send error:",
+            error
+        )
 
 
 # ============================================================
@@ -87,23 +109,27 @@ def send_message(chat_id, text, keyboard=None):
 def main_menu():
 
     return [
+
         [
             {"text": "✈️ Bilet qidirish"},
             {"text": "🔎 Arzon sanani topish"}
         ],
+
         [
             {"text": "🔔 Narxni kuzatish"},
             {"text": "📋 Qidiruvlarim"}
         ],
+
         [
             {"text": "👤 Profil"},
             {"text": "ℹ️ Yordam"}
         ]
+
     ]
 
 
 # ============================================================
-# OPENAI AI PARSER
+# GEMINI AI FLIGHT PARSER
 # ============================================================
 
 def analyze_flight_request(user_text):
@@ -113,47 +139,87 @@ def analyze_flight_request(user_text):
     system_prompt = f"""
 You are Uchuv, an AI flight search assistant.
 
-Your job is to understand a user's natural-language flight request
-and extract structured flight-search parameters.
+Your job is to understand a user's natural-language
+flight request and extract structured flight-search parameters.
 
 Current date is {today}.
 
-The user may write in Uzbek Cyrillic, Uzbek Latin, Russian or English.
+The user may write in:
+- Uzbek Latin
+- Uzbek Cyrillic
+- Russian
+- English
 
 IMPORTANT RULES:
 
 1. Understand natural language.
+
 2. Convert cities and airports to IATA airport codes when possible.
+
 3. If the user says "Toshkent", use TAS.
+
 4. If the user says "Istanbul", use IST.
-5. If a date has no year, use the next logical occurrence based on today's date.
-6. If the user does not specify a return date, return_date must be null.
-7. If baggage is explicitly requested, baggage must be true.
-8. If baggage is explicitly not required, baggage must be false.
-9. If baggage is not mentioned, baggage must be unknown.
-10. Do not invent missing information.
-11. If a required field is missing, mark it as null.
-12. Adults should normally be 1 if the user does not specify the number of passengers.
-13. Children and infants default to 0.
-14. Default cabin is economy.
-15. If the user asks for the cheapest option, priority is cheapest.
-16. If the user asks for the fastest option, priority is fastest.
-17. If the user asks for the best option, priority is best.
-18. If the request is unclear, use null rather than guessing.
 
-Required information for an actual flight search:
-- origin
-- destination
-- departure_date
-- adults
+5. If the user says "Sankt Peterburg", use LED.
 
-Return ONLY the structured JSON according to the provided schema.
+6. If the user says "Farg‘ona" or "Fargona", use FEG.
+
+7. If a date has no year, use the next logical occurrence
+   based on today's date.
+
+8. If the user does not specify a return date,
+   return_date must be null.
+
+9. If baggage is explicitly requested,
+   baggage must be true.
+
+10. If baggage is explicitly not required,
+    baggage must be false.
+
+11. If baggage is not mentioned,
+    baggage must be null.
+
+12. Adults should normally be 1 if the user does not
+    specify the number of passengers.
+
+13. Children default to 0.
+
+14. Infants default to 0.
+
+15. Default cabin is economy.
+
+16. If the user asks for the cheapest option,
+    priority must be "cheapest".
+
+17. If the user asks for the fastest option,
+    priority must be "fastest".
+
+18. If the user asks for the best option,
+    priority must be "best".
+
+19. If the request is unclear, use null rather than guessing.
+
+20. Required information for an actual flight search:
+    origin
+    destination
+    departure_date
+    adults
+
+21. "5 oktabrga" means departure date October 5.
+
+22. "2 kishi" means adults = 2.
+
+23. Preserve the actual IATA airport code in origin
+    and destination whenever possible.
+
+24. Return ONLY JSON matching the provided schema.
 """
 
 
     schema = {
+
         "type": "object",
-        "additionalProperties": False,
+
         "properties": {
 
             "origin": {
@@ -189,34 +255,15 @@ Return ONLY the structured JSON according to the provided schema.
             },
 
             "trip_type": {
-                "type": ["string", "null"],
-                "enum": [
-                    "one_way",
-                    "round_trip",
-                    "multi_city",
-                    None
-                ]
+                "type": ["string", "null"]
             },
 
             "cabin": {
-                "type": ["string", "null"],
-                "enum": [
-                    "economy",
-                    "premium_economy",
-                    "business",
-                    "first",
-                    None
-                ]
+                "type": ["string", "null"]
             },
 
             "priority": {
-                "type": ["string", "null"],
-                "enum": [
-                    "cheapest",
-                    "fastest",
-                    "best",
-                    None
-                ]
+                "type": ["string", "null"]
             },
 
             "ready_for_search": {
@@ -229,6 +276,7 @@ Return ONLY the structured JSON according to the provided schema.
                     "type": "string"
                 }
             }
+
         },
 
         "required": [
@@ -251,32 +299,54 @@ Return ONLY the structured JSON according to the provided schema.
 
     payload = {
 
-        "model": OPENAI_MODEL,
-
-        "instructions": system_prompt,
-
-        "input": user_text,
-
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "flight_request",
-                "strict": True,
-                "schema": schema
-            }
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text": system_prompt
+                }
+            ]
         },
 
-        "store": False
+        "contents": [
+
+            {
+                "role": "user",
+
+                "parts": [
+                    {
+                        "text": user_text
+                    }
+                ]
+
+            }
+
+        ],
+
+        "generationConfig": {
+
+            "responseMimeType": "application/json",
+
+            "responseSchema": schema,
+
+            "temperature": 0.1
+
+        }
+
     }
 
 
     request = urllib.request.Request(
-        OPENAI_API,
-        data=json.dumps(payload).encode("utf-8"),
+
+        f"{GEMINI_API}?key={GEMINI_API_KEY}",
+
+        data=json.dumps(
+            payload
+        ).encode("utf-8"),
+
         headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENAI_API_KEY}"
+            "Content-Type": "application/json"
         },
+
         method="POST"
     )
 
@@ -292,37 +362,111 @@ Return ONLY the structured JSON according to the provided schema.
                 response.read().decode("utf-8")
             )
 
+
+    except urllib.error.HTTPError as error:
+
+        error_body = error.read().decode(
+            "utf-8",
+            errors="replace"
+        )
+
+        print(
+            "Gemini API HTTP error:",
+            error.code
+        )
+
+        print(
+            "Gemini response:",
+            error_body
+        )
+
+        return None
+
+
     except Exception as error:
 
-        print("OpenAI API error:", error)
+        print(
+            "Gemini API error:",
+            error
+        )
 
         return None
 
 
     # --------------------------------------------------------
-    # Extract structured output from Responses API
+    # Extract Gemini JSON
     # --------------------------------------------------------
 
     try:
 
-        for item in result.get("output", []):
+        candidates = result.get(
+            "candidates",
+            []
+        )
 
-            if item.get("type") != "message":
-                continue
+        if not candidates:
 
-            for content in item.get("content", []):
+            print(
+                "Gemini returned no candidates:",
+                result
+            )
 
-                if content.get("type") == "output_text":
+            return None
 
-                    text = content.get("text", "")
 
-                    return json.loads(text)
+        content = candidates[0].get(
+            "content",
+            {}
+        )
+
+
+        parts = content.get(
+            "parts",
+            []
+        )
+
+
+        if not parts:
+
+            print(
+                "Gemini returned no content:",
+                result
+            )
+
+            return None
+
+
+        text = parts[0].get(
+            "text",
+            ""
+        )
+
+
+        if not text:
+
+            print(
+                "Gemini returned empty text"
+            )
+
+            return None
+
+
+        return json.loads(text)
+
 
     except Exception as error:
 
-        print("AI parsing error:", error)
+        print(
+            "Gemini JSON parsing error:",
+            error
+        )
 
-    return None
+        print(
+            "Gemini raw result:",
+            result
+        )
+
+        return None
 
 
 # ============================================================
@@ -332,6 +476,7 @@ Return ONLY the structured JSON according to the provided schema.
 def format_flight_request(data):
 
     if not data:
+
         return (
             "❌ AI bilan bog‘lanishda xatolik yuz berdi.\n\n"
             "Iltimos, birozdan keyin qayta urinib ko‘ring."
@@ -359,90 +504,174 @@ def format_flight_request(data):
 
 
     # --------------------------------------------------------
-    # If information is missing
+    # INFORMATION MISSING
     # --------------------------------------------------------
 
-    if not data.get("ready_for_search"):
+    if not data.get(
+        "ready_for_search"
+    ):
 
-        message = "✈️ Safar ma’lumotlarini tushundim.\n\n"
+        message = (
+            "✈️ Safar ma’lumotlarini tushundim.\n\n"
+        )
+
 
         if origin:
-            message += f"🛫 Jo‘nash: {origin}\n"
+            message += (
+                f"🛫 Jo‘nash: {origin}\n"
+            )
+
 
         if destination:
-            message += f"🛬 Borish: {destination}\n"
+            message += (
+                f"🛬 Borish: {destination}\n"
+            )
+
 
         if departure:
-            message += f"📅 Sana: {departure}\n"
+            message += (
+                f"📅 Sana: {departure}\n"
+            )
+
 
         if adults:
-            message += f"👤 Kattalar: {adults}\n"
+            message += (
+                f"👤 Kattalar: {adults}\n"
+            )
+
 
         if children:
-            message += f"👶 Bolalar: {children}\n"
+            message += (
+                f"👶 Bolalar: {children}\n"
+            )
+
 
         if infants:
-            message += f"👶 Chaqaloqlar: {infants}\n"
+            message += (
+                f"👶 Chaqaloqlar: {infants}\n"
+            )
+
 
         if baggage is True:
-            message += "🧳 Bagaj: Ha\n"
+
+            message += (
+                "🧳 Bagaj: Ha\n"
+            )
 
         elif baggage is False:
-            message += "🧳 Bagaj: Yo‘q\n"
+
+            message += (
+                "🧳 Bagaj: Yo‘q\n"
+            )
+
 
         message += "\n"
 
-        message += "⚠️ Qidiruvni boshlash uchun yana kerak:\n"
+        message += (
+            "⚠️ Qidiruvni boshlash uchun "
+            "yana kerak:\n"
+        )
+
 
         for item in missing:
-            message += f"• {item}\n"
+
+            message += (
+                f"• {item}\n"
+            )
+
 
         return message
 
 
     # --------------------------------------------------------
-    # Ready for search
+    # READY FOR SEARCH
     # --------------------------------------------------------
 
     message = (
+
         "✈️ <Uchuv AI> so‘rovingizni tushundi.\n\n"
+
         f"🛫 {origin}\n"
+
         f"🛬 {destination}\n"
+
         f"📅 {departure}\n"
+
     )
 
-    if trip_type == "round_trip" and return_date:
-        message += f"🔙 Qaytish: {return_date}\n"
 
-    message += f"👤 Kattalar: {adults}\n"
+    if (
+        trip_type == "round_trip"
+        and return_date
+    ):
 
-    if children:
-        message += f"👶 Bolalar: {children}\n"
+        message += (
+            f"🔙 Qaytish: {return_date}\n"
+        )
 
-    if infants:
-        message += f"👶 Chaqaloqlar: {infants}\n"
-
-    if baggage is True:
-        message += "🧳 Bagaj: Ha\n"
-
-    elif baggage is False:
-        message += "🧳 Bagaj: Yo‘q\n"
-
-    else:
-        message += "🧳 Bagaj: Ko‘rsatilmagan\n"
-
-    if cabin:
-        message += f"💺 Klass: {cabin}\n"
-
-    if priority:
-        message += f"🎯 Ustuvorlik: {priority}\n"
 
     message += (
+        f"👤 Kattalar: {adults}\n"
+    )
+
+
+    if children:
+
+        message += (
+            f"👶 Bolalar: {children}\n"
+        )
+
+
+    if infants:
+
+        message += (
+            f"👶 Chaqaloqlar: {infants}\n"
+        )
+
+
+    if baggage is True:
+
+        message += (
+            "🧳 Bagaj: Ha\n"
+        )
+
+    elif baggage is False:
+
+        message += (
+            "🧳 Bagaj: Yo‘q\n"
+        )
+
+    else:
+
+        message += (
+            "🧳 Bagaj: Ko‘rsatilmagan\n"
+        )
+
+
+    if cabin:
+
+        message += (
+            f"💺 Klass: {cabin}\n"
+        )
+
+
+    if priority:
+
+        message += (
+            f"🎯 Ustuvorlik: {priority}\n"
+        )
+
+
+    message += (
+
         "\n✅ Barcha asosiy ma’lumotlar tayyor.\n\n"
+
         "🔎 Keyingi bosqichda men shu ma’lumotlar "
         "asosida real aviachipta qidiruv tizimlarini "
         "ulab, narxlarni solishtiraman."
+
     )
+
 
     return message
 
@@ -458,7 +687,9 @@ def handle_message(message):
     if not chat:
         return
 
+
     chat_id = chat["id"]
+
 
     text = message.get(
         "text",
@@ -473,16 +704,21 @@ def handle_message(message):
     if text == "/start":
 
         send_message(
+
             chat_id,
 
             "Assalomu alaykum!\n\n"
+
             "✈️ Men Uchuv — AI Flight Finder botiman.\n\n"
+
             "Men sizga aviachipta variantlarini topish, "
             "narxlarni solishtirish va eng optimal variantni "
             "tanlashga yordam beraman.\n\n"
+
             "Boshlash uchun «✈️ Bilet qidirish» tugmasini bosing.",
 
             main_menu()
+
         )
 
         return
@@ -495,14 +731,19 @@ def handle_message(message):
     if text == "✈️ Bilet qidirish":
 
         send_message(
+
             chat_id,
 
             "✈️ Bilet qidirish\n\n"
+
             "Safaringizni oddiy xabar shaklida yozing.\n\n"
+
             "Masalan:\n\n"
+
             "Toshkentdan Istanbulga 20 sentyabr, "
             "2 kishi, bagaj bilan, imkon qadar arzon "
             "variant kerak."
+
         )
 
         return
@@ -516,7 +757,6 @@ def handle_message(message):
 
         send_message(
             chat_id,
-
             "🔎 Arzon sana qidiruvi tez orada ishga tushadi."
         )
 
@@ -527,7 +767,6 @@ def handle_message(message):
 
         send_message(
             chat_id,
-
             "🔔 Narx kuzatuvi tez orada ishga tushadi."
         )
 
@@ -538,7 +777,6 @@ def handle_message(message):
 
         send_message(
             chat_id,
-
             "📋 Hozircha sizda saqlangan qidiruvlar yo‘q."
         )
 
@@ -549,7 +787,6 @@ def handle_message(message):
 
         send_message(
             chat_id,
-
             f"👤 Telegram ID: {chat_id}"
         )
 
@@ -559,13 +796,18 @@ def handle_message(message):
     if text == "ℹ️ Yordam":
 
         send_message(
+
             chat_id,
 
             "ℹ️ Yordam\n\n"
+
             "Safaringizni oddiy matn shaklida yozing.\n\n"
+
             "Masalan:\n"
+
             "Toshkentdan Dubayga 15 oktabr, "
             "1 kishi, bagaj bilan."
+
         )
 
         return
@@ -581,9 +823,15 @@ def handle_message(message):
     )
 
 
-    data = analyze_flight_request(text)
+    data = analyze_flight_request(
+        text
+    )
 
-    response = format_flight_request(data)
+
+    response = format_flight_request(
+        data
+    )
+
 
     send_message(
         chat_id,
@@ -600,7 +848,10 @@ def telegram_loop():
 
     offset = None
 
-    print("Uchuv bot ishga tushdi...")
+    print(
+        "Uchuv bot ishga tushdi..."
+    )
+
 
     while True:
 
@@ -610,7 +861,9 @@ def telegram_loop():
                 "timeout": 30
             }
 
+
             if offset is not None:
+
                 data["offset"] = offset
 
 
@@ -664,14 +917,19 @@ class HealthHandler(
 
     def do_GET(self):
 
-        self.send_response(200)
+        self.send_response(
+            200
+        )
+
 
         self.send_header(
             "Content-Type",
             "text/plain"
         )
 
+
         self.end_headers()
+
 
         self.wfile.write(
             b"Uchuv AI Flight Finder is running!"
@@ -722,7 +980,9 @@ def main():
         daemon=True
     )
 
+
     health_thread.start()
+
 
     telegram_loop()
 
