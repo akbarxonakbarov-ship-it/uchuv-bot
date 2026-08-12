@@ -96,11 +96,12 @@ def send_message(
 
     except Exception as error:
 
-        print(
-            "Telegram send error:",
-            error
-        )
+    print("========== GEMINI API ERROR ==========")
+    print("ERROR TYPE:", type(error).__name__)
+    print("ERROR:", str(error))
+    print("======================================")
 
+    return None
 
 # ============================================================
 # TELEGRAM MENU
