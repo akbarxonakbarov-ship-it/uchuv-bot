@@ -3,12 +3,13 @@ import json
 import time
 import urllib.request
 import urllib.parse
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-BOT_TOKEN = os.environ.get(8708505479:AAHO2AjQFd2pyxa9qa9X3kwiw6RbDrxdINU)
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN topilmadi")
-
 
 API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -94,7 +95,7 @@ def handle_message(message):
     if text == "🔎 Arzon sanani topish":
         send_message(
             chat_id,
-            "🔎 Arzon sanani topish funksiyasi tez orada ishga tushadi."
+            "🔎 Arzon sana qidiruvi tez orada ishga tushadi."
         )
         return
 
@@ -132,21 +133,18 @@ def handle_message(message):
     send_message(
         chat_id,
         "Xabaringizni qabul qildim.\n\n"
-        "Hozircha real aviachipta qidirish moduli ulanmagan. "
-        "Keyingi bosqichda AI va flight-search API ulanadi."
+        "Hozircha real aviachipta qidirish moduli ulanmagan."
     )
 
 
-def main():
+def telegram_loop():
     offset = None
 
     print("Uchuv bot ishga tushdi...")
 
     while True:
         try:
-            data = {
-                "timeout": 30
-            }
+            data = {"timeout": 30}
 
             if offset is not None:
                 data["offset"] = offset
@@ -163,8 +161,41 @@ def main():
                         handle_message(message)
 
         except Exception as error:
-            print("Xatolik:", error)
+            print("Telegram xatolik:", error)
             time.sleep(5)
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Uchuv bot is running!")
+
+    def log_message(self, format, *args):
+        return
+
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 10000))
+
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+
+    print(f"Health server running on port {port}")
+
+    server.serve_forever()
+
+
+def main():
+    health_thread = threading.Thread(
+        target=start_health_server,
+        daemon=True
+    )
+
+    health_thread.start()
+
+    telegram_loop()
 
 
 if __name__ == "__main__":
